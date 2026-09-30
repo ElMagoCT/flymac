@@ -3,6 +3,7 @@ import Metal
 import MetalKit
 import CoreVideo
 import SwiftUI
+import CoreImage
 
 /// Draws BGRA CVPixelBuffers with Metal. Shaders are compiled at runtime
 /// (no Xcode metal compiler needed). Phase 3 monitor tools plug in as extra
@@ -82,6 +83,13 @@ public final class MetalVideoRenderer: NSObject, MTKViewDelegate, @unchecked Sen
     }
 
     public func submit(_ frame: VideoFrame) { lock.withLock { latest = frame } }
+
+    /// The most recent picture as a CGImage (for screenshots and stills).
+    public func snapshot() -> CGImage? {
+        guard let f = lock.withLock({ latest }) else { return nil }
+        let ci = CIImage(cvPixelBuffer: f.pixelBuffer)
+        return CIContext().createCGImage(ci, from: ci.extent)
+    }
 
     public func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {}
 
