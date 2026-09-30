@@ -1,0 +1,17 @@
+1
+00:00:00,000 --> 00:00:00,033
+<font size="28">SrtCnt : 1, DiffTime : 33ms
+2026-09-20 16:41:12.104
+[iso : 100] [shutter : 1/2000.0] [fnum : 280] [ev : 0] [ct : 5487] [color_md : default] [focal_len : 240] [latitude: 33.610210] [longitude: -112.008430] [rel_alt: 0.000 abs_alt: 512.300] </font>
+
+2
+00:00:00,033 --> 00:00:00,066
+<font size="28">SrtCnt : 2, DiffTime : 33ms
+2026-09-20 16:41:12.137
+[iso : 100] [shutter : 1/2000.0] [fnum : 280] [ev : 0] [ct : 5487] [color_md : default] [focal_len : 240] [latitude: 33.610212] [longitude: -112.008431] [rel_alt: 0.400 abs_alt: 512.700] </font>
+
+3
+00:00:00,066 --> 00:00:00,100
+<font size="28">SrtCnt : 3, DiffTime : 34ms
+2026-09-20 16:41:12.170
+[iso : 110] [shutter : 1/1600.0] [fnum : 280] [ev : 0.3] [ct : 5490] [color_md : default] [focal_len : 240] [latitude: 33.610300] [longitude: -112.008500] [rel_alt: 12.300 abs_alt: 524.600] </font>
