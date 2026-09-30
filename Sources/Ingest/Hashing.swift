@@ -1,4 +1,5 @@
 import Foundation
+import FlyCore
 import CryptoKit
 
 public enum Hashing {

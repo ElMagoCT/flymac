@@ -41,7 +41,7 @@ let package = Package(
 
         .testTarget(name: "DUMLTests", dependencies: ["DUML", "Fixtures"]),
         .testTarget(name: "TelemetryTests", dependencies: ["Telemetry", "Fixtures"]),
-        .testTarget(name: "IngestTests", dependencies: ["Ingest"]),
+        .testTarget(name: "IngestTests", dependencies: ["Ingest", "FlyCore"]),
         .testTarget(name: "FlyCoreTests", dependencies: ["FlyCore"]),
     ]
 )

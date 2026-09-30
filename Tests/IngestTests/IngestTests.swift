@@ -1,6 +1,7 @@
 import Testing
 import Foundation
 @testable import Ingest
+import FlyCore
 
 private func tempDir() -> URL {
     let u = FileManager.default.temporaryDirectory.appendingPathComponent("flymac-tests-\(UUID().uuidString)")
