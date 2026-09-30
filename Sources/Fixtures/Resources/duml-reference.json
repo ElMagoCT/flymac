@@ -1,0 +1,99 @@
+{
+ "crc8_table_head": [
+  0,
+  94,
+  188,
+  226,
+  97,
+  63,
+  221,
+  131
+ ],
+ "crc16_table_head": [
+  0,
+  4489,
+  8978,
+  12955,
+  17956,
+  22445,
+  25910,
+  29887
+ ],
+ "crc8_seed": 119,
+ "crc16_seed": 13970,
+ "crc8_of_55_0d_04": 51,
+ "packets": [
+  {
+   "name": "ping_pc_to_rc",
+   "sender": 10,
+   "receiver": 6,
+   "sequence": 1,
+   "commandSet": 0,
+   "commandID": 0,
+   "payload": "",
+   "isResponse": false,
+   "ackType": 2,
+   "frame": "550d04330a0601004000007d38"
+  },
+  {
+   "name": "get_version_pc_to_fc",
+   "sender": 10,
+   "receiver": 3,
+   "sequence": 4660,
+   "commandSet": 0,
+   "commandID": 1,
+   "payload": "",
+   "isResponse": false,
+   "ackType": 2,
+   "frame": "550d04330a0334124000012135"
+  },
+  {
+   "name": "get_version_response",
+   "sender": 3,
+   "receiver": 10,
+   "sequence": 4660,
+   "commandSet": 0,
+   "commandID": 1,
+   "payload": "000102030405060708090a0b0c0d0e0f1011121314151617",
+   "isResponse": true,
+   "ackType": 0,
+   "frame": "55250484030a3412800001000102030405060708090a0b0c0d0e0f101112131415161749a8"
+  },
+  {
+   "name": "rc_push_no_ack",
+   "sender": 6,
+   "receiver": 10,
+   "sequence": 7,
+   "commandSet": 6,
+   "commandID": 5,
+   "payload": "0004000400040004",
+   "isResponse": false,
+   "ackType": 0,
+   "frame": "551504a9060a07000006050004000400040004b9ba"
+  },
+  {
+   "name": "camera_indexed_sender",
+   "sender": 33,
+   "receiver": 10,
+   "sequence": 65535,
+   "commandSet": 2,
+   "commandID": 128,
+   "payload": "010203",
+   "isResponse": true,
+   "ackType": 1,
+   "frame": "55100456210affffa00280010203c4a9"
+  },
+  {
+   "name": "max_ish_payload",
+   "sender": 10,
+   "receiver": 1,
+   "sequence": 42,
+   "commandSet": 2,
+   "commandID": 1,
+   "payload": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b",
+   "isResponse": false,
+   "ackType": 2,
+   "frame": "5539057b0a012a00400201000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b501b"
+  }
+ ]
+}
