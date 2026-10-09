@@ -69,6 +69,8 @@ Conclusions:
 - The goggles start as a USB device, then deliberately re-attach as host once their main software runs (a full detach, not a PD role swap). That host attach is what an iPad/phone sees.
 - macOS accessory security ("Allow accessories to connect") blocked the device during the window, so interfaces and endpoints were not captured yet. FlyMac/Doctor now detect such blocked devices by walking the IOUSB plane and say so.
 
+Repeat, 23:36 (accessory policy now "Automatically When Unlocked", kernel shows `Policy Authorized`): Mac was source + host from 23:36:48 to 23:36:57 but the goggles never raised the USB 2 data lines, so nothing enumerated; at 23:36:57 they detached and came back as host. So the device window is **not reliable**: 1 of 2 power cycles. Timing of the button presses is the open question.
+
 Next: allow accessories, repeat the power cycle, and capture the interfaces in the ~3–6 s device window. Then try to keep the goggles in device mode (a hub or USB-A host port, as DJI Assistant 2 uses).
 
 Next: force the goggles into the *device* role by putting a hub (or USB-A host port) between them and the Mac. Hubs' downstream ports are always hosts, and that is how DJI Assistant 2 normally reaches DJI hardware from a computer.
