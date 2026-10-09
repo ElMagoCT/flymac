@@ -150,7 +150,7 @@ final class AppModel: ObservableObject {
                 case .snapshot(let list): for d in list { self.upsert(self.discovered(usb: d)) }
                 case .attached(let d):
                     let dd = self.discovered(usb: d); self.upsert(dd)
-                    self.toast = "\(dd.title) connected"
+                    self.toast = d.blockedByMacOS == true ? "\(dd.title) found, but macOS is blocking it" : "\(dd.title) connected"
                     self.doctor.note("USB attach: \(d.productName ?? d.vidPid)")
                 case .detached(let d):
                     let id = "usb:\(d.id)"

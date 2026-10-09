@@ -7,3 +7,8 @@ DerivedData/
 captures/*.pcap
 captures/*.pcapng
 /library/
+
+# Raw captures can contain device serial numbers; commit only redacted extracts.
+captures/*kernel*.log
+captures/*watch*.log
+captures/*role-monitor.log

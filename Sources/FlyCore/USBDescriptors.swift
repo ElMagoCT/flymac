@@ -20,6 +20,9 @@ public struct USBDeviceDescriptor: Codable, Sendable, Hashable, Identifiable {
     /// The kernel driver that matched the *device* (e.g. AppleUSBHostCompositeDevice).
     public var claimedBy: String?
     public var interfaces: [USBInterfaceDescriptor]
+    /// True when macOS enumerated the device but its accessory security
+    /// ("Allow accessories to connect") is keeping it from any driver or app.
+    public var blockedByMacOS: Bool?
 
     public init(vendorID: UInt16, productID: UInt16, vendorName: String? = nil, productName: String? = nil,
                 serialNumber: String? = nil, deviceClass: UInt8? = nil, deviceSubClass: UInt8? = nil,

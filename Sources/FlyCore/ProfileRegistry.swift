@@ -142,7 +142,8 @@ public enum BuiltInProfiles {
 
     public static let gogglesN3 = DeviceProfile(
         id: "dji.goggles-n3", displayName: "DJI Goggles N3", vendor: dji, family: .goggles,
-        usbMatches: [USBMatch(vendorID: USBVendor.dji, productNameContains: "Goggles")],
+        usbMatches: [USBMatch(vendorID: USBVendor.dji, productIDs: [0x0020]),   // seen 2026-10-08, DISCOVERY 3c
+                     USBMatch(vendorID: USBVendor.dji, productNameContains: "Goggles")],
         claims: [
             .init(.massStorage, via: .massStorage, evidence: .unverified, source: "goggles have a microSD slot"),
             .init(.usbVideo, via: .usbBulk, evidence: .unverified, source: "DJI Fly wired live view; transport unknown until captured"),

@@ -35,6 +35,9 @@ public struct DoctorReport: Sendable {
         if let b = d.bcdDevice { s += String(format: "  bcdDevice %04x", b) }
         if let u = d.usbVersion { s += String(format: "  usb %x.%02x", u >> 8, u & 0xff) }
         s += "\n  claimed by: \(d.claimedBy ?? "nothing")\n"
+        if d.blockedByMacOS == true {
+            s += "  BLOCKED by macOS accessory security: allow it in System Settings → Privacy & Security → Allow accessories to connect\n"
+        }
         for i in d.interfaces {
             s += String(format: "  if %d alt %d  class %02x/%02x/%02x %@%@\n", i.number, i.alternateSetting,
                         i.interfaceClass, i.interfaceSubClass, i.interfaceProtocol, i.className,

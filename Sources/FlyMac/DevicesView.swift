@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import FlyCore
 import USBTransport
@@ -58,6 +59,19 @@ struct DeviceCard: View {
                     }
                 }
                 if profile.claims.isEmpty { Chip(text: "nothing proven yet", symbol: "questionmark.circle") }
+            }
+            if device.usb?.blockedByMacOS == true {
+                HStack(alignment: .top, spacing: 8) {
+                    Image(systemName: "lock.shield").foregroundStyle(Theme.warn)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("macOS is blocking this accessory").font(.callout.weight(.medium))
+                        Text("Allow it when macOS asks, or in System Settings → Privacy & Security → Allow accessories to connect.")
+                            .font(.caption).foregroundStyle(Theme.dim)
+                    }
+                    Spacer()
+                    Button("Open") { NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension")!) }.controlSize(.small)
+                }
+                .padding(10).background(Theme.warn.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
             }
             if let u = device.usb {
                 VStack(alignment: .leading, spacing: 3) {

@@ -51,6 +51,26 @@ Reading: the goggles are a USB host that expects a phone/tablet behind the cable
 
 Tools: `tools/usbc-role-monitor.sh` logs port power, data role and the Mac's device state every second (read-only). Snapshot in `captures/04-goggles-role-snapshot.txt`.
 
+### 3c. 2026-10-08 — power-cycle while plugged in: the goggles ARE a USB device for ~6 s
+
+Goggles plugged into the Mac, powered off, then on. Per-second monitor plus a live kernel log (raw logs kept out of git because they contain the serial number).
+
+| Time | What happened |
+|---|---|
+| 23:31:43 | Goggles off: no plug detected |
+| 23:31:46 | Mac attaches as **source + host (DFP)**: kernel "setting USB2 USB3 as DFP" |
+| 23:31:52.4 | **Mac enumerates the goggles: `0x2ca3/0020/0504`, product `Goggles_N3`, serial `8HA8…(redacted)`, 480 Mb/s** |
+| 23:31:52.4 | macOS: "device functionality blocked by transport restrictions … device will not be registered for matching" |
+| 23:31:55 | Device gone ("hardware connection lost") |
+| 23:31:58 | Goggles detach completely ("No plug detected") and re-attach as **source + host**; the Mac is a device again by 23:32:05 |
+
+Conclusions:
+- **Confirmed:** Goggles N3 USB identity is **VID 0x2CA3, PID 0x0020, bcdDevice 0x0504**, product string `Goggles_N3`.
+- The goggles start as a USB device, then deliberately re-attach as host once their main software runs (a full detach, not a PD role swap). That host attach is what an iPad/phone sees.
+- macOS accessory security ("Allow accessories to connect") blocked the device during the window, so interfaces and endpoints were not captured yet. FlyMac/Doctor now detect such blocked devices by walking the IOUSB plane and say so.
+
+Next: allow accessories, repeat the power cycle, and capture the interfaces in the ~3–6 s device window. Then try to keep the goggles in device mode (a hub or USB-A host port, as DJI Assistant 2 uses).
+
 Next: force the goggles into the *device* role by putting a hub (or USB-A host port) between them and the Mac. Hubs' downstream ports are always hosts, and that is how DJI Assistant 2 normally reaches DJI hardware from a computer.
 
 ## 4. Avata 2 over USB-C
@@ -69,7 +89,7 @@ _pending_
 
 | Feature | Avata 2 | Goggles N3 | RC-N2 | Evidence |
 |---|---|---|---|---|
-| USB enumeration | | goggles enumerate the *Mac* (goggles = host) | | 3a/3b |
+| USB enumeration | | **confirmed 2ca3:0020** while booting; then goggles become host | | 3a–3c |
 | Card as mass storage | | n/a? | n/a | |
 | DUML handshake (ping/version) | | | | |
 | Stick/button read | n/a | n/a | | |

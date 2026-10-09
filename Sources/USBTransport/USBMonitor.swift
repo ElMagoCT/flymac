@@ -64,9 +64,36 @@ public final class USBMonitor: @unchecked Sendable {
         // Arm both iterators (this also enumerates what is already attached).
         drainAdded(addedIter, initial: true)
         drainRemoved(removedIter)
+        pollBlocked(initial: true)
         continuation?.yield(.snapshot(devices))
+        // Blocked devices raise no matching notifications, so poll for them.
+        // 4 Hz is enough to catch a device that only lives for a few seconds.
+        let timer = CFRunLoopTimerCreateWithHandler(kCFAllocatorDefault, CFAbsoluteTimeGetCurrent() + 0.25, 0.25, 0, 0) { [weak self] _ in
+            self?.pollBlocked(initial: false)
+        }
+        CFRunLoopAddTimer(runLoop, timer, .defaultMode)
         CFRunLoopRun()
         IONotificationPortDestroy(port)
+    }
+
+    private var blocked: [UInt64: USBDeviceDescriptor] = [:]
+
+    private func pollBlocked(initial: Bool) {
+        // Exclude only properly registered devices; blocked ones must stay visible to the walk.
+        let registered = lock.withLock { Set(known.keys) }.subtracting(blocked.keys)
+        let now = USBEnumerator.blockedDevices(excluding: registered)
+        let nowIDs = Set(now.map(\.id))
+        for (id, d) in now where blocked[id] == nil {
+            blocked[id] = d
+            lock.withLock { known[id] = d }
+            if !initial { continuation?.yield(.attached(d)) }
+        }
+        for (id, d) in blocked where !nowIDs.contains(id) {
+            blocked[id] = nil
+            // It either vanished or macOS let it through (then it re-registers normally).
+            lock.withLock { known[id] = nil }
+            continuation?.yield(.detached(d))
+        }
     }
 
     private func drainAdded(_ iter: io_iterator_t, initial: Bool = false) {
@@ -77,7 +104,10 @@ public final class USBMonitor: @unchecked Sendable {
             var entryID: UInt64 = 0
             IORegistryEntryGetRegistryEntryID(s, &entryID)
             if let d = USBEnumerator.describe(service: s) {
+                // A device macOS just let through: it was already reported as blocked.
+                let wasBlocked = blocked.removeValue(forKey: entryID) != nil
                 lock.withLock { known[entryID] = d }
+                if wasBlocked { continuation?.yield(.detached(d)) }
                 if !initial { continuation?.yield(.attached(d)) }
             }
         }

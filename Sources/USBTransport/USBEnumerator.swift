@@ -15,16 +15,45 @@ public enum USBEnumerator {
         guard IOServiceGetMatchingServices(kIOMainPortDefault, IOServiceMatching(deviceClassName), &it) == KERN_SUCCESS else { return [] }
         defer { IOObjectRelease(it) }
         var out: [USBDeviceDescriptor] = []
+        var seen = Set<UInt64>()
         while case let s = IOIteratorNext(it), s != 0 {
             defer { IOObjectRelease(s) }
+            seen.insert(entryID(s))
             if let d = describe(service: s) { out.append(d) }
+        }
+        // Devices macOS enumerated but refused to register (accessory security)
+        // never show up in matching. They are still in the IOUSB plane.
+        out += blockedDevices(excluding: seen).map(\.descriptor)
+        return out
+    }
+
+    /// Walk the IOUSB plane for IOUSBHostDevice nodes that matching did not
+    /// return: those are devices macOS is holding back. Read-only.
+    public static func blockedDevices(excluding registered: Set<UInt64>) -> [(id: UInt64, descriptor: USBDeviceDescriptor)] {
+        var it: io_iterator_t = 0
+        guard IORegistryCreateIterator(kIOMainPortDefault, "IOUSB", IOOptionBits(kIORegistryIterateRecursively), &it) == KERN_SUCCESS else { return [] }
+        defer { IOObjectRelease(it) }
+        var out: [(UInt64, USBDeviceDescriptor)] = []
+        while case let s = IOIteratorNext(it), s != 0 {
+            defer { IOObjectRelease(s) }
+            guard IOObjectConformsTo(s, deviceClassName) != 0 else { continue }
+            let id = entryID(s)
+            guard !registered.contains(id), var d = describe(service: s, endpoints: false) else { continue }
+            d.blockedByMacOS = true
+            out.append((id, d))
         }
         return out
     }
 
+    public static func entryID(_ s: io_registry_entry_t) -> UInt64 {
+        var id: UInt64 = 0
+        IORegistryEntryGetRegistryEntryID(s, &id)
+        return id
+    }
+
     /// Full descriptor for one device service, including interfaces and (when
     /// the device can be opened non-exclusively) endpoints.
-    public static func describe(service s: io_service_t) -> USBDeviceDescriptor? {
+    public static func describe(service s: io_service_t, endpoints: Bool = true) -> USBDeviceDescriptor? {
         guard let vid: Int = prop(s, "idVendor"), let pid: Int = prop(s, "idProduct") else { return nil }
         var d = USBDeviceDescriptor(vendorID: UInt16(vid), productID: UInt16(pid))
         d.vendorName = prop(s, "USB Vendor Name")
@@ -54,7 +83,7 @@ public enum USBEnumerator {
             }
         }
         d.interfaces = interfaces.sorted { ($0.number, $0.alternateSetting) < ($1.number, $1.alternateSetting) }
-        fillEndpoints(&d, service: s)
+        if endpoints { fillEndpoints(&d, service: s) }
         return d
     }
 
