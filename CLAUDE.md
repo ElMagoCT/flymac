@@ -23,7 +23,7 @@ FLYMAC_SCREENSHOT_DIR=/tmp/shots build/FlyMac.app/Contents/MacOS/FlyMac   # self
 - `Bundle.module` in the .app: resource bundles must be copied to `Contents/Resources` (bundle.sh does this).
 - `CWWiFiClient.ssid()` returns nil without Location permission. Hotspot detection falls back to gateway heuristic + dialect probe; never rely on SSID alone.
 - `system_profiler SPUSBDataType` prints **nothing** on this Mac with no devices attached (Apple Silicon); that is the baseline, not a bug. `ioreg -p IOUSB` shows only root hubs.
-- Metal layers don't appear in `cacheDisplay` captures; the screenshotter composites `renderer.snapshot()` over the MTKView rect.
+- Metal layers don't appear in `cacheDisplay` captures; see "Multiple devices" below for how screenshot mode works around it.
 - The mock card is rendered once into `~/Library/Application Support/FlyMac/mock-card` (~45 MB, ~20 s first run). Delete the folder to regenerate.
 - Sandboxed Bash in Claude Code can't see USB or run system_profiler usefully; use the app or `flymac-doctor` from a normal shell, or `dangerouslyDisableSandbox`.
 
