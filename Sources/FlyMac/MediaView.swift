@@ -36,13 +36,13 @@ struct MediaView: View {
         VStack(spacing: 0) {
             HStack(spacing: 12) {
                 Image(systemName: d.match.profile.family.symbol).foregroundStyle(Theme.accent)
-                Text(d.title).font(.headline)
+                Text(model.name(for: d)).font(.headline)
                 Text("\(groups.count) captures · \(files.reduce(0) { $0 + $1.size }.bytesString)").font(.caption).foregroundStyle(Theme.dim).monospacedDigit()
                 Spacer()
                 Toggle("Hide imported", isOn: $hideImported).toggleStyle(.checkbox).font(.caption)
                 Button("All new") { selected = Set(visibleGroups.filter { !isImported($0) }.map(\.id)) }.controlSize(.small)
                 Button("None") { selected = [] }.controlSize(.small).disabled(selected.isEmpty)
-                Button { pull(src) } label: { Label(selected.isEmpty ? "Pull" : "Pull \(selected.count) · \(selectedBytes.bytesString)", systemImage: "arrow.down.to.line") }
+                Button { pull(src, d) } label: { Label(selected.isEmpty ? "Pull" : "Pull \(selected.count) · \(selectedBytes.bytesString)", systemImage: "arrow.down.to.line") }
                     .buttonStyle(.borderedProminent).tint(Theme.accent).controlSize(.small).disabled(selected.isEmpty)
                 Button { Task { await load(d, src) } } label: { Image(systemName: "arrow.clockwise") }.controlSize(.small)
             }
@@ -92,9 +92,9 @@ struct MediaView: View {
         } catch { self.error = error.localizedDescription }
     }
 
-    func pull(_ src: AppModel.MediaSourceKind) {
+    func pull(_ src: AppModel.MediaSourceKind, _ d: DiscoveredDevice) {
         let chosen = groups.filter { selected.contains($0.id) }.flatMap(\.files).filter { model.settings.pairProxies || $0.kind != .proxy }
-        model.download(chosen, from: src)
+        model.download(chosen, from: src, device: d)
         selected = []
     }
 }
@@ -205,6 +205,7 @@ struct JobRow: View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
                 Text(job.file.name).font(.callout).monospaced().lineLimit(1)
+                if Set(model.downloads.map(\.sourceKey)).count > 1 { Text(job.sourceName).font(.caption2).foregroundStyle(Theme.dim).lineLimit(1) }
                 Spacer()
                 switch job.state {
                 case .queued: Chip(text: "queued")
@@ -222,7 +223,7 @@ struct JobRow: View {
                 if job.state == .running { Button("Pause") { Task { await model.downloader.pause(job.id) } }.controlSize(.mini) }
                 if job.state == .paused { Button("Resume") { Task { await model.downloader.resume(job.id) } }.controlSize(.mini) }
                 if job.state == .running || job.state == .queued || job.state == .paused { Button("Cancel") { Task { await model.downloader.cancel(job.id) } }.controlSize(.mini) }
-                if case .failed = job.state { Button("Retry") { Task { await model.downloader.cancel(job.id); await model.downloader.clearFinished(); await model.downloader.enqueue(job.file, from: job.url) } }.controlSize(.mini) }
+                if case .failed = job.state { Button("Retry") { Task { await model.downloader.cancel(job.id); await model.downloader.clearFinished(); await model.downloader.enqueue(job.file, from: job.url, sourceKey: job.sourceKey, sourceName: job.sourceName) } }.controlSize(.mini) }
             }
         }.padding(.vertical, 4)
     }

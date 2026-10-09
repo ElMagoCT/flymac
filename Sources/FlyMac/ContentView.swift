@@ -53,13 +53,14 @@ struct Sidebar: View {
                         if model.selection != .media && model.selection != .telemetry { model.selection = .devices }
                     } label: {
                         HStack(spacing: 8) {
-                            Image(systemName: d.match.profile.family.symbol).frame(width: 16)
+                            Image(systemName: d.match.profile.family.symbol).frame(width: 16).foregroundStyle(model.color(forID: d.id))
                             VStack(alignment: .leading, spacing: 1) {
-                                Text(d.title).lineLimit(1)
+                                Text(model.name(for: d)).lineLimit(1)
                                 Text(d.subtitle).font(.caption2).foregroundStyle(Theme.dim).lineLimit(1)
                             }
                             Spacer()
-                            if model.selectedDeviceID == d.id { Circle().fill(Theme.accent).frame(width: 6, height: 6) }
+                            if model.session(for: d.id) != nil { Image(systemName: "waveform.path.ecg").font(.caption2).foregroundStyle(Theme.dim).help("Read-only link open") }
+                            if model.selectedDeviceID == d.id { Circle().fill(model.color(forID: d.id)).frame(width: 6, height: 6) }
                         }
                     }
                     .buttonStyle(.plain)
@@ -102,7 +103,7 @@ struct MenuBarView: View {
             ForEach(model.devices) { d in
                 HStack {
                     Image(systemName: d.match.profile.family.symbol)
-                    VStack(alignment: .leading) { Text(d.title); Text(d.subtitle).font(.caption2).foregroundStyle(Theme.dim) }
+                    VStack(alignment: .leading) { Text(model.name(for: d)); Text(d.subtitle).font(.caption2).foregroundStyle(Theme.dim) }
                     Spacer()
                     if d.match.profile.supports(.quickTransfer, atLeast: .unverified) || d.match.profile.supports(.massStorage, atLeast: .unverified) {
                         Button("Pull new files") {

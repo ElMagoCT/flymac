@@ -10,6 +10,8 @@ tools/bundle.sh [debug|release]       # → build/FlyMac.app (default release)
 tools/test.sh                         # swift test — REQUIRED before every commit
 swift run flymac-doctor [--scan|--watch|--raw]
 FLYMAC_SCREENSHOT_DIR=/tmp/shots build/FlyMac.app/Contents/MacOS/FlyMac   # self-screenshots each screen, then quits
+# extra env for that run: FLYMAC_MOCK_GOGGLES=3 (simulated goggles, not saved to settings),
+# FLYMAC_SCREENSHOT_RECORD=1 (Record all for 3 s, writes recordings.txt; files land in ~/Movies/FlyMac Recordings — trash them after)
 ```
 
 ## Gotchas
@@ -25,9 +27,17 @@ FLYMAC_SCREENSHOT_DIR=/tmp/shots build/FlyMac.app/Contents/MacOS/FlyMac   # self
 - The mock card is rendered once into `~/Library/Application Support/FlyMac/mock-card` (~45 MB, ~20 s first run). Delete the folder to regenerate.
 - Sandboxed Bash in Claude Code can't see USB or run system_profiler usefully; use the app or `flymac-doctor` from a normal shell, or `dangerouslyDisableSandbox`.
 
+## Multiple devices
+
+- Identity is `DiscoveredDevice.stableKey` (USB serial, else VID:PID@port). Names/numbers/colours come from `DeviceRoster` (FlyCore, unit-tested); nicknames live in `settings.deviceNicknames` keyed by stableKey. Never key per-device state by profile id.
+- Per-device state: `AppModel.sessions[deviceID]` (telemetry), `LiveWall.tiles` (≤4, one source per tile; assigning a source already on screen moves it), download jobs keyed `sourceKey|path` with one staging folder per source, library groups keyed `source|day|stem`.
+- USB detach must only tear down that device's session/tile.
+- Screenshot mode swaps MTKView for a still-image view (`ScreenshotBridge.stillFrames`) and counts frames on submit, because Metal layers are invisible to `cacheDisplay`.
+- `AppSettings` has a hand-written tolerant decoder: add new fields there with a default, or old settings files reset to defaults.
+
 ## Repo conventions
 
-- Public GitHub: `ElMagoCT/flymac`, branch `main`. Small commits, push after each. Commits end with `Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>`.
+- Public GitHub: `ElMagoCT/flymac`, branch `main`. Small commits, push after each. Commits end with the Co-Authored-By line for the model doing the work.
 - Every hardware finding goes in `docs/DISCOVERY.md` (dated) and, once understood, `docs/PROTOCOLS.md` with sources. Raw captures in `captures/` (text/JSON; pcaps are gitignored).
 - Profiles: `BuiltInProfiles` in `Sources/FlyCore/ProfileRegistry.swift`. Fill PIDs from real descriptors only.
 - DUML commands FlyMac may send are whitelisted in `DUMLSession.allowedCommands`. Adding one needs a Phase 0 finding that it is read-only or idempotent.

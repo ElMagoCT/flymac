@@ -52,6 +52,12 @@ public struct AppSettings: Codable, Sendable, Equatable {
     public var pairProxies: Bool
     public var autoOfferOnDetect: Bool
     public var recordingCodec: String   // "hevc" | "prores422" | "prores422lt"
+    /// User names for devices, keyed by `DiscoveredDevice.stableKey`.
+    public var deviceNicknames: [String: String] = [:]
+    /// How many simulated Goggles N3 to run alongside the mock aircraft (0 = none).
+    public var mockGoggles: Int = 0
+    /// Live view tiles share one set of monitor-tool settings when true.
+    public var linkMonitorTools: Bool = true
 
     public static let `default` = AppSettings(
         enabledSources: [.mockDevice, .usbDevices, .quickTransfer, .mountedCards, .uvcCapture],
@@ -65,6 +71,29 @@ public struct AppSettings: Codable, Sendable, Equatable {
         self.enabledSources = enabledSources; self.enabledTools = enabledTools; self.libraryPath = libraryPath
         self.parallelDownloads = parallelDownloads; self.verifyHashes = verifyHashes; self.pairProxies = pairProxies
         self.autoOfferOnDetect = autoOfferOnDetect; self.recordingCodec = recordingCodec
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case enabledSources, enabledTools, libraryPath, parallelDownloads, verifyHashes, pairProxies
+        case autoOfferOnDetect, recordingCodec, deviceNicknames, mockGoggles, linkMonitorTools
+    }
+
+    /// Tolerant decoding: settings files from older versions keep working and
+    /// new fields take their defaults.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let d = AppSettings.default
+        enabledSources = try c.decodeIfPresent(Set<Source>.self, forKey: .enabledSources) ?? d.enabledSources
+        enabledTools = try c.decodeIfPresent(Set<Tool>.self, forKey: .enabledTools) ?? d.enabledTools
+        libraryPath = try c.decodeIfPresent(String.self, forKey: .libraryPath) ?? d.libraryPath
+        parallelDownloads = try c.decodeIfPresent(Int.self, forKey: .parallelDownloads) ?? d.parallelDownloads
+        verifyHashes = try c.decodeIfPresent(Bool.self, forKey: .verifyHashes) ?? d.verifyHashes
+        pairProxies = try c.decodeIfPresent(Bool.self, forKey: .pairProxies) ?? d.pairProxies
+        autoOfferOnDetect = try c.decodeIfPresent(Bool.self, forKey: .autoOfferOnDetect) ?? d.autoOfferOnDetect
+        recordingCodec = try c.decodeIfPresent(String.self, forKey: .recordingCodec) ?? d.recordingCodec
+        deviceNicknames = try c.decodeIfPresent([String: String].self, forKey: .deviceNicknames) ?? [:]
+        mockGoggles = min(4, max(0, try c.decodeIfPresent(Int.self, forKey: .mockGoggles) ?? 0))
+        linkMonitorTools = try c.decodeIfPresent(Bool.self, forKey: .linkMonitorTools) ?? true
     }
 
     public func isOn(_ s: Source) -> Bool { enabledSources.contains(s) }

@@ -16,7 +16,10 @@ final class AppModel: ObservableObject {
     static let version = "0.1.0"
 
     @Published var settings: AppSettings { didSet { settings.save(); applySettings(from: oldValue) } }
-    @Published var devices: [DiscoveredDevice] = []
+    @Published var devices: [DiscoveredDevice] = [] { didSet { relabel() } }
+    /// Display names, ordinals and colour slots for everything connected.
+    @Published private(set) var labels: [String: DeviceRoster.Label] = [:]
+    private var roster = DeviceRoster()
     @Published var selection: Route? = .devices
     @Published var selectedDeviceID: String?
     @Published var network: NetworkSnapshot?
@@ -29,8 +32,11 @@ final class AppModel: ObservableObject {
     let usb = USBMonitor()
     let hotspot = HotspotWatcher()
     var mock: MockAircraft?
-    let telemetry = TelemetryModel()
-    let live = LiveModel()
+    private(set) var mockGoggles: [MockGoggles] = []
+    /// One read-only telemetry session per device, keyed by DiscoveredDevice.id.
+    @Published private(set) var sessions: [String: TelemetryModel] = [:]
+    @Published var focusedSessionID: String?
+    let live = LiveWall()
     let doctor = DoctorModel()
     private var tasks: [Task<Void, Never>] = []
     private var volumeObservers: [NSObjectProtocol] = []
@@ -52,13 +58,35 @@ final class AppModel: ObservableObject {
     }
 
     init() {
-        let s = AppSettings.load()
+        var s = AppSettings.load()
+        // Screenshot/demo runs can ask for simulated goggles without touching saved settings.
+        if let n = ProcessInfo.processInfo.environment["FLYMAC_MOCK_GOGGLES"].flatMap(Int.init) { s.mockGoggles = min(4, max(0, n)) }
         settings = s
         library = MediaLibrary(root: URL(fileURLWithPath: s.libraryPath))
         downloader = Downloader(staging: FileManager.default.temporaryDirectory.appendingPathComponent("FlyMac-staging"), maxParallel: s.parallelDownloads)
         registry.register(MockAircraft.profile)
+        registry.register(MockGoggles.profile)
+        live.linkTools = s.linkMonitorTools
+        live.makeSource = { [weak self] opt, delay in self?.makeVideoSource(opt, artificialDelayMs: delay) }
         start()
-        live.refreshOptions(settings: s)
+        refreshLiveOptions()
+    }
+
+    // MARK: names and colours
+
+    private func relabel() {
+        labels = roster.update(devices, nicknames: settings.deviceNicknames)
+        refreshLiveOptions()
+    }
+
+    func name(for d: DiscoveredDevice) -> String { labels[d.id]?.name ?? d.title }
+    func name(forID id: String) -> String { devices.first { $0.id == id }.map(name(for:)) ?? id }
+    func color(forID id: String?) -> Color { Theme.deviceColor(id.flatMap { labels[$0]?.colorSlot } ?? 0) }
+    func device(_ id: String) -> DiscoveredDevice? { devices.first { $0.id == id } }
+
+    func setNickname(_ name: String, for d: DiscoveredDevice) {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty { settings.deviceNicknames.removeValue(forKey: d.stableKey) } else { settings.deviceNicknames[d.stableKey] = trimmed }
     }
 
     var visibleRoutes: [Route] {
@@ -92,8 +120,14 @@ final class AppModel: ObservableObject {
         if old.isOn(.mountedCards) != settings.isOn(.mountedCards) { settings.isOn(.mountedCards) ? startVolumes() : stopVolumes() }
         if old.isOn(.mockDevice) != settings.isOn(.mockDevice) { settings.isOn(.mockDevice) ? startMock() : stopMock() }
         if old.parallelDownloads != settings.parallelDownloads { Task { await downloader.setParallel(settings.parallelDownloads) } }
+        if old.mockGoggles != settings.mockGoggles || old.isOn(.mockDevice) != settings.isOn(.mockDevice) { syncMockGoggles() }
+        if old.deviceNicknames != settings.deviceNicknames { relabel() }
+        if old.linkMonitorTools != settings.linkMonitorTools {
+            live.linkTools = settings.linkMonitorTools
+            if settings.linkMonitorTools { live.syncUniformsToAll() }
+        }
         if !visibleRoutes.contains(selection ?? .devices) { selection = .devices }
-        live.refreshOptions(settings: settings)
+        refreshLiveOptions()
     }
 
     private func upsert(_ d: DiscoveredDevice) {
@@ -119,8 +153,10 @@ final class AppModel: ObservableObject {
                     self.toast = "\(dd.title) connected"
                     self.doctor.note("USB attach: \(d.productName ?? d.vidPid)")
                 case .detached(let d):
-                    self.remove(id: "usb:\(d.id)")
-                    self.telemetry.disconnect(reason: "unplugged")
+                    let id = "usb:\(d.id)"
+                    // Only this device's session ends; other goggles keep streaming.
+                    self.disconnectTelemetry(id, reason: "unplugged")
+                    self.remove(id: id)
                     self.doctor.note("USB detach: \(d.productName ?? d.vidPid)")
                 }
             }
@@ -187,6 +223,7 @@ final class AppModel: ObservableObject {
 
     private func startMock() {
         let m = MockAircraft(); mock = m
+        syncMockGoggles()
         tasks.append(Task { [weak self] in
             do {
                 try await m.start { msg in Task { @MainActor in self?.mockStatus = msg } }
@@ -197,7 +234,101 @@ final class AppModel: ObservableObject {
             } catch { await MainActor.run { self?.mockStatus = "mock failed: \(error.localizedDescription)" } }
         })
     }
-    private func stopMock() { mock?.stop(); mock = nil; remove(id: "mock"); telemetry.disconnect(reason: "mock off") }
+    private func stopMock() {
+        disconnectTelemetry("mock", reason: "mock off")
+        mock?.stop(); mock = nil; remove(id: "mock")
+        syncMockGoggles()
+    }
+
+    /// Bring the number of simulated goggles in line with Settings.
+    private func syncMockGoggles() {
+        let want = settings.isOn(.mockDevice) ? settings.mockGoggles : 0
+        while mockGoggles.count > want {
+            let g = mockGoggles.removeLast()
+            disconnectTelemetry(g.id, reason: "mock goggles removed")
+            if let t = live.tile(showing: "live:\(g.id)") { t.clear() }
+            g.stop(); remove(id: g.id)
+        }
+        while mockGoggles.count < want {
+            let g = MockGoggles(index: mockGoggles.count + 1)
+            mockGoggles.append(g)
+            upsert(g.discovered)
+        }
+    }
+
+    // MARK: Telemetry sessions (one per device)
+
+    func session(for id: String) -> TelemetryModel? { sessions[id] }
+
+    func canLinkTelemetry(_ d: DiscoveredDevice) -> Bool {
+        if d.origin == .mock { return true }
+        guard let u = d.usb else { return false }
+        return u.interfaces.contains { $0.interfaceClass == USBClass.vendorSpecific && $0.endpoints.contains { $0.kind == .bulk } }
+    }
+
+    func connectTelemetry(_ d: DiscoveredDevice) {
+        let link: DUMLLink
+        if d.id == "mock", let m = mock { link = m.makeDUMLLink() }
+        else if let g = mockGoggles.first(where: { $0.id == d.id }) { link = g.makeDUMLLink() }
+        else if let u = d.usb {
+            do { link = try USBBulkLink(device: u) }
+            catch { toast = "\(name(for: d)): \(error)"; doctor.note("DUML link failed on \(name(for: d)): \(error)"); return }
+        } else { return }
+        let t = sessions[d.id] ?? TelemetryModel(deviceID: d.id)
+        t.connect(link: link)
+        sessions[d.id] = t
+        focusedSessionID = d.id
+        doctor.note("DUML link opened: \(name(for: d)) via \(link.name)")
+    }
+
+    func disconnectTelemetry(_ id: String, reason: String) {
+        guard let t = sessions.removeValue(forKey: id) else { return }
+        t.disconnect(reason: reason)
+        if focusedSessionID == id { focusedSessionID = sessions.keys.sorted().first }
+    }
+
+    /// Handshake lines from every session, labelled by device, for the Doctor.
+    var allHandshakes: [String] {
+        sessions.sorted { $0.key < $1.key }.flatMap { id, t in t.handshake.map { "[\(name(forID: id))] \($0)" } }
+    }
+
+    // MARK: Live sources
+
+    func refreshLiveOptions() {
+        var o: [LiveSourceOption] = []
+        if settings.isOn(.mockDevice), let m = mock, devices.contains(where: { $0.id == "mock" }) {
+            _ = m
+            o.append(.init(id: "live:mock", title: name(forID: "mock"), subtitle: "H.264 encode → decode, no hardware", kind: .mockAircraft, deviceID: "mock"))
+        }
+        for g in mockGoggles {
+            o.append(.init(id: "live:\(g.id)", title: name(forID: g.id), subtitle: "Simulated goggles feed", kind: .mockGoggles(g.index), deviceID: g.id))
+        }
+        if settings.isOn(.uvcCapture) {
+            for d in UVCSource.devices() {
+                o.append(.init(id: "live:uvc:\(d.uniqueID)", title: d.localizedName, subtitle: d.manufacturer.isEmpty ? "UVC" : d.manufacturer, kind: .uvc(d.uniqueID)))
+            }
+        }
+        live.setOptions(o)
+    }
+
+    func liveOption(forDevice id: String) -> LiveSourceOption? { live.options.first { $0.deviceID == id } }
+
+    private func makeVideoSource(_ opt: LiveSourceOption, artificialDelayMs: Double) -> (source: any VideoSource, meter: StatsMeter)? {
+        switch opt.kind {
+        case .mockAircraft:
+            guard let m = mock else { return nil }
+            let v = m.makeVideoSource(); v.latencyBudgetMs = artificialDelayMs
+            return (v, v.stats)
+        case .mockGoggles(let i):
+            guard let g = mockGoggles.first(where: { $0.index == i }) else { return nil }
+            let v = g.makeVideoSource(); v.latencyBudgetMs = artificialDelayMs
+            return (v, v.stats)
+        case .uvc(let uid):
+            guard let d = UVCSource.devices().first(where: { $0.uniqueID == uid }) else { return nil }
+            let u = UVCSource(device: d)
+            return (u, u.stats)
+        }
+    }
 
     // MARK: Downloads → library
 
@@ -206,7 +337,7 @@ final class AppModel: ObservableObject {
         for j in jobs {
             if case .done(let url) = j.state, !imported.contains(j.id) {
                 imported.insert(j.id)
-                let lib = library, id = selectedDevice?.match.profile.id ?? "unknown", verify = settings.verifyHashes, file = j.file
+                let lib = library, id = j.sourceName.isEmpty ? "unknown" : j.sourceName, verify = settings.verifyHashes, file = j.file
                 Task.detached {
                     let r = lib.importFile(at: url, originalName: file.name, sourceID: id, captured: file.modified, verify: verify, expectedSHA256: file.sha256)
                     try? FileManager.default.removeItem(at: url)
@@ -222,7 +353,7 @@ final class AppModel: ObservableObject {
     /// Where to download from / import from for the selected device.
     func mediaSource(for d: DiscoveredDevice) -> MediaSourceKind? {
         switch d.origin {
-        case .mock: return mock.map { .http(base: $0.base, dialect: FlyMacJSONDialect()) }
+        case .mock: return d.id == "mock" ? mock.map { .http(base: $0.base, dialect: FlyMacJSONDialect()) } : nil
         case .wifi:
             guard let gw = d.gateway, let base = URL(string: "http://\(gw)/") else { return nil }
             let dialect = d.match.profile.quickTransferDialect.flatMap { DialectRegistry.dialect(id: $0) }
@@ -235,13 +366,16 @@ final class AppModel: ObservableObject {
 
     enum MediaSourceKind { case http(base: URL, dialect: (any QuickTransferDialect)?); case folder(URL) }
 
-    func download(_ files: [RemoteMediaFile], from source: MediaSourceKind) {
+    /// Pull files from one device. The device's name is stored with each
+    /// library item, so two pairs of goggles never mix up their captures.
+    func download(_ files: [RemoteMediaFile], from source: MediaSourceKind, device d: DiscoveredDevice) {
+        let key = d.stableKey, label = name(for: d)
         switch source {
         case .http(let base, let dialect):
             guard let dialect else { toast = "No known API for this device yet. Run Doctor."; return }
-            Task { for f in files { await downloader.enqueue(f, from: dialect.downloadURL(base: base, file: f)) } }
+            Task { for f in files { await downloader.enqueue(f, from: dialect.downloadURL(base: base, file: f), sourceKey: key, sourceName: label) } }
         case .folder(let root):
-            let lib = library, id = selectedDevice?.match.profile.id ?? "card", verify = settings.verifyHashes
+            let lib = library, id = label, verify = settings.verifyHashes
             Task.detached {
                 for f in files {
                     _ = lib.importFile(at: root.appendingPathComponent(f.path), sourceID: id, captured: f.modified, verify: verify)

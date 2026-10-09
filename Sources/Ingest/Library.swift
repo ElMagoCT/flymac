@@ -11,6 +11,15 @@ import FlyCore
 /// Imports are copy-then-verify: the file is written to `.partial`, hashed,
 /// compared with the source, then renamed into place. Duplicates are detected
 /// by size + hash, not by name, so re-importing a card is a no-op.
+public struct LibraryGroup: Identifiable, Sendable, Hashable {
+    public var id: String
+    public var stem: String
+    public var sourceID: String
+    public var date: Date?
+    public var items: [LibraryItem]
+    static func key(source: String, day: String, stem: String) -> String { "\(source)|\(day)|\(stem)" }
+}
+
 public final class MediaLibrary: @unchecked Sendable {
     public let root: URL
     private let lock = NSLock()
@@ -41,11 +50,16 @@ public final class MediaLibrary: @unchecked Sendable {
     }
 
     /// Captures grouped by stem, newest first.
-    public func groups() -> [(stem: String, date: Date?, items: [LibraryItem])] {
+    /// Captures grouped by source + day + stem, newest first. The source is part
+    /// of the key because two identical devices (two pairs of goggles) both
+    /// write `DJI_0001.*`; those are different captures and must not merge.
+    public func groups() -> [LibraryGroup] {
         var by: [String: [LibraryItem]] = [:]
-        for i in items { by["\(i.captured.map { dayFolder(for: $0) } ?? "")/\(i.stem)", default: []].append(i) }
-        return by.map { (stem: $0.value[0].stem, date: $0.value.compactMap(\.captured).min(), items: $0.value.sorted { $0.originalName < $1.originalName }) }
-            .sorted { ($0.date ?? .distantPast, $0.stem) > ($1.date ?? .distantPast, $1.stem) }
+        for i in items { by[LibraryGroup.key(source: i.sourceID, day: i.captured.map { dayFolder(for: $0) } ?? "", stem: i.stem), default: []].append(i) }
+        return by.map { LibraryGroup(id: $0.key, stem: $0.value[0].stem, sourceID: $0.value[0].sourceID,
+                                     date: $0.value.compactMap(\.captured).min(),
+                                     items: $0.value.sorted { $0.originalName < $1.originalName }) }
+            .sorted { ($0.date ?? .distantPast, $0.stem, $0.sourceID) > ($1.date ?? .distantPast, $1.stem, $1.sourceID) }
     }
 
     public enum ImportResult: Sendable, Equatable {

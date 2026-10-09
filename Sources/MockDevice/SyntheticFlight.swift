@@ -9,11 +9,27 @@ public struct SyntheticFlight: Sendable {
     public var duration: TimeInterval = 240
     public var maxAltitude = 88.0
     public var radius = 260.0   // metres
+    /// Seconds added to every lookup so several mocks are not in lockstep.
+    public var phase: TimeInterval = 0
+    /// Sky tint for the rendered scene, so mock feeds are easy to tell apart.
+    public var skyHue: Double = 0
 
     public init() {}
 
-    public func frame(at t: TimeInterval, index: Int) -> TelemetryFrame {
-        var f = TelemetryFrame(index: index, time: t)
+    /// A distinct but deterministic flight per index (0 = the mock aircraft's own).
+    public init(variant: Int) {
+        let v = Double(variant)
+        home = (33.610210 + 0.0021 * sin(v * 2.1), -112.008430 + 0.0024 * cos(v * 1.7))
+        duration = 240 + 35 * v
+        maxAltitude = 88 - 14 * v + (variant % 2 == 0 ? 0 : 20)
+        radius = 260 - 45 * v
+        phase = 23 * v
+        skyHue = [0, 0.09, -0.07, 0.16, -0.12][variant % 5]
+    }
+
+    public func frame(at time: TimeInterval, index: Int) -> TelemetryFrame {
+        let t = fmod(time + phase, duration)
+        var f = TelemetryFrame(index: index, time: time)
         let p = max(0, min(1, t / duration))
         // altitude: climb 0-15%, cruise, descend last 15%
         let alt: Double

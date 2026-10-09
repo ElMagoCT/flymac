@@ -8,20 +8,25 @@ import Telemetry
 /// VideoToolbox, and pushes the bytes through the *real* ElementaryStreamSource
 /// (parser → decoder). So the mock exercises the exact path a USB stream will.
 public final class MockVideoSource: VideoSource, @unchecked Sendable {
-    public let name = "Mock aircraft (H.264)"
+    public let name: String
     public var frames: AsyncStream<VideoFrame> { es.frames }
     public let es: ElementaryStreamSource
     public var stats: StatsMeter { es.stats }
     private let renderer: SceneRenderer
     private var compressor: VTCompressionSession?
     private var task: Task<Void, Never>?
-    public let flight = SyntheticFlight()
+    public let flight: SyntheticFlight
     private let fps: Double
     private let started = CACurrentMediaTime()
     public var latencyBudgetMs: Double = 0   // add artificial delay to test the meter
 
-    public init(width: Int = 1280, height: Int = 720, fps: Double = 30) {
+    public init(width: Int = 1280, height: Int = 720, fps: Double = 30, flight: SyntheticFlight = SyntheticFlight(),
+                name: String = "Mock aircraft (H.264)", osdLabel: String = "MOCK") {
+        self.flight = flight
+        self.name = name
         renderer = SceneRenderer(width: width, height: height)
+        renderer.label = osdLabel
+        renderer.skyHue = flight.skyHue
         es = ElementaryStreamSource(name: "mock", codec: .h264)
         self.fps = fps
     }

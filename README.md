@@ -20,6 +20,7 @@ Evidence levels: **confirmed** = seen working on real hardware here, with a capt
 | Telemetry HUD + flight map | mock (DUML) · SRT parsing confirmed on DJI-format samples | unverified | unverified | sticks: unverified | n/a |
 | Live video → Metal, latency readout, record HEVC/ProRes | mock (H.264 encode→decode) | unverified | unverified | unverified | confirmed path (UVC source) |
 | Monitor tools (zebra, peaking, false colour, thirds, desqueeze) | mock | any live source | any live source | any live source | any live source |
+| Several devices at once (up to 4 live views, per-device telemetry, fleet map, Record all) | mock (aircraft + up to 4 simulated goggles) | unverified | unverified, needs USB video first | unverified | confirmed path |
 | Camera control | not built (Phase 4, only after Phase 0 proves it safe) | | | | |
 
 Phase 0 discovery results live in [docs/DISCOVERY.md](docs/DISCOVERY.md); everything learned about the protocols, with sources and dated captures, in [docs/PROTOCOLS.md](docs/PROTOCOLS.md).
@@ -37,6 +38,16 @@ swift run flymac-doctor    # headless Doctor report; add --scan, --watch, --raw
 ```
 
 The mock aircraft is on by default in Settings, so the whole app works with nothing plugged in. Turn it off and every trace of it leaves the screen.
+
+## Several goggles at once
+
+Plug in as many as you like. Identical devices get stable numbers ("Goggles N3 1", "Goggles N3 2") and a colour that follows them across every screen. The pencil on a device card names it ("Jake's goggles"); the name is remembered by serial number. Live shows up to four views in a grid, **Show all** fills it, **Record all** writes one file per view with a shared timestamp. Each device gets its own read-only telemetry link, and unplugging one never touches the others. Media pulled from two cards that both contain `DJI_0001.MP4` stays separate in the library.
+
+To try it with no hardware: Settings → Sources → Simulation → Mock goggles (1–4).
+
+![Four live views](docs/screenshots/multi-live.png)
+
+Real Goggles N3 video over USB is still unverified (Phase 0), so on real hardware this currently applies to telemetry links, cards and UVC capture cards.
 
 ## Layout
 

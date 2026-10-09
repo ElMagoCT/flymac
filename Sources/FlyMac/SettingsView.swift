@@ -16,6 +16,28 @@ struct SettingsView: View {
                         }.disabled(s == .phoneMirror)   // Phase 2 fallback, not built yet
                     }
                 }
+                if model.settings.isOn(.mockDevice) {
+                    Section("Simulation") {
+                        Stepper(value: $model.settings.mockGoggles, in: 0...4) {
+                            VStack(alignment: .leading) {
+                                Text(model.settings.mockGoggles == 0 ? "Mock goggles: off" : "Mock goggles: \(model.settings.mockGoggles)")
+                                Text("Simulated Goggles N3, each with its own feed and telemetry, for trying multi-goggles without hardware.").font(.caption).foregroundStyle(Theme.dim)
+                            }
+                        }
+                    }
+                }
+                if !model.settings.deviceNicknames.isEmpty {
+                    Section("Device names") {
+                        ForEach(model.settings.deviceNicknames.sorted { $0.value < $1.value }, id: \.key) { key, name in
+                            HStack {
+                                Text(name)
+                                Spacer()
+                                Text(key).font(.caption2).monospaced().foregroundStyle(Theme.dim).lineLimit(1).truncationMode(.middle)
+                                Button { model.settings.deviceNicknames.removeValue(forKey: key) } label: { Image(systemName: "minus.circle") }.buttonStyle(.plain)
+                            }
+                        }
+                    }
+                }
             }.formStyle(.grouped).tabItem { Label("Sources", systemImage: "cable.connector") }
 
             Form {

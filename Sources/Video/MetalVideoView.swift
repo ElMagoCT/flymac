@@ -82,7 +82,13 @@ public final class MetalVideoRenderer: NSObject, MTKViewDelegate, @unchecked Sen
         super.init()
     }
 
-    public func submit(_ frame: VideoFrame) { lock.withLock { latest = frame } }
+    /// When no MTKView is drawing (headless capture), count frames as displayed on arrival.
+    public var countOnSubmit = false
+
+    public func submit(_ frame: VideoFrame) {
+        lock.withLock { latest = frame }
+        if countOnSubmit { onDisplayed?(frame) }
+    }
 
     /// The most recent picture as a CGImage (for screenshots and stills).
     public func snapshot() -> CGImage? {

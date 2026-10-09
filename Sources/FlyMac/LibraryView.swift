@@ -7,8 +7,8 @@ import Telemetry
 
 struct LibraryView: View {
     @EnvironmentObject var model: AppModel
-    @State private var selectedStem: String?
-    @State private var groups: [(stem: String, date: Date?, items: [Ingest.LibraryItem])] = []
+    @State private var selectedID: String?
+    @State private var groups: [LibraryGroup] = []
 
     var body: some View {
         HSplitView {
@@ -28,8 +28,9 @@ struct LibraryView: View {
                             ForEach(days, id: \.self) { day in
                                 Section {
                                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 170, maximum: 220), spacing: 10)], spacing: 10) {
-                                        ForEach(groups.filter { dayString($0.date) == day }, id: \.stem) { g in
-                                            LibraryTile(group: g, selected: selectedStem == g.stem, root: model.library.root).onTapGesture { selectedStem = g.stem }
+                                        ForEach(groups.filter { dayString($0.date) == day }) { g in
+                                            LibraryTile(group: g, selected: selectedID == g.id, root: model.library.root, showSource: multipleSources)
+                                                .onTapGesture { selectedID = g.id }
                                         }
                                     }.padding(.horizontal, 16)
                                 } header: {
@@ -41,7 +42,7 @@ struct LibraryView: View {
                     }
                 }
             }.frame(minWidth: 420)
-            if let g = groups.first(where: { $0.stem == selectedStem }) {
+            if let g = groups.first(where: { $0.id == selectedID }) {
                 LibraryDetail(group: g).frame(minWidth: 360, idealWidth: 460)
             }
         }
@@ -52,19 +53,25 @@ struct LibraryView: View {
     var days: [String] { var seen: [String] = []; for g in groups { let d = dayString(g.date); if !seen.contains(d) { seen.append(d) } }; return seen }
     func dayString(_ d: Date?) -> String { d.map { $0.formatted(.dateTime.weekday(.wide).month(.wide).day().year()) } ?? "Undated" }
     func reload() { groups = model.library.groups() }
+    /// Show which device a capture came from once more than one has been imported.
+    var multipleSources: Bool { Set(groups.map(\.sourceID)).count > 1 }
 }
 
 struct LibraryTile: View {
-    let group: (stem: String, date: Date?, items: [Ingest.LibraryItem])
+    let group: LibraryGroup
     let selected: Bool
     let root: URL
+    var showSource = false
     var primary: Ingest.LibraryItem? { group.items.first { $0.kind == .video } ?? group.items.first { $0.kind == .photo } ?? group.items.first }
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
             Thumb(source: primary.map { .local(root.appendingPathComponent($0.relativePath)) })
                 .aspectRatio(16/9, contentMode: .fill).frame(height: 100).clipped().clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
             HStack {
-                Text(group.stem).font(.caption.weight(.medium)).monospaced()
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(group.stem).font(.caption.weight(.medium)).monospaced()
+                    if showSource { Text(group.sourceID).font(.system(size: 9)).foregroundStyle(Theme.dim).lineLimit(1) }
+                }
                 Spacer()
                 ForEach(group.items, id: \.relativePath) { i in
                     Text((i.originalName as NSString).pathExtension.uppercased()).font(.system(size: 8, weight: .bold)).foregroundStyle(Theme.dim)
@@ -79,7 +86,7 @@ struct LibraryTile: View {
 
 struct LibraryDetail: View {
     @EnvironmentObject var model: AppModel
-    let group: (stem: String, date: Date?, items: [Ingest.LibraryItem])
+    let group: LibraryGroup
     @State private var player: AVPlayer?
     @State private var track: TelemetryTrack?
     @State private var scrubFrame: TelemetryFrame?
@@ -132,7 +139,7 @@ struct LibraryDetail: View {
                 }
             }.padding(16)
         }
-        .task(id: group.stem) { await setup() }
+        .task(id: group.id) { await setup() }
         .onDisappear { player?.pause() }
     }
 
@@ -150,28 +157,54 @@ struct LibraryDetail: View {
     }
 }
 
-/// MapKit path with a moving cursor. Shared by the library and the live HUD.
+/// MapKit paths with moving cursors. One track in the library, one per
+/// linked device on the Telemetry screen.
 struct FlightMap: View {
-    let frames: [TelemetryFrame]
-    var cursor: TelemetryFrame?
+    struct Track: Identifiable {
+        var id: String
+        var frames: [TelemetryFrame]
+        var cursor: TelemetryFrame?
+        var color: Color
+        var emphasised = true
+    }
+    let tracks: [Track]
+
+    init(tracks: [Track]) { self.tracks = tracks }
+    init(frames: [TelemetryFrame], cursor: TelemetryFrame?) {
+        tracks = [Track(id: "single", frames: frames, cursor: cursor, color: Theme.accent)]
+    }
+
     var body: some View {
-        let coords = frames.map { CLLocationCoordinate2D(latitude: $0.latitude!, longitude: $0.longitude!) }
-        Map(initialPosition: .region(region(coords))) {
-            MapPolyline(coordinates: coords).stroke(Theme.accent, lineWidth: 3)
-            if let first = coords.first { Annotation("Home", coordinate: first) { Image(systemName: "house.fill").foregroundStyle(.white).padding(4).background(Theme.ok, in: Circle()) } }
-            if let c = cursor, c.hasPosition {
-                Annotation("", coordinate: CLLocationCoordinate2D(latitude: c.latitude!, longitude: c.longitude!)) {
-                    Image(systemName: "location.north.fill").rotationEffect(.degrees(c.yaw ?? 0)).foregroundStyle(.white).padding(5).background(Theme.accent, in: Circle())
+        Map(initialPosition: .region(region(tracks.flatMap { $0.frames.map(coord) }))) {
+            ForEach(tracks) { t in
+                let coords = t.frames.map(coord)
+                MapPolyline(coordinates: coords).stroke(t.color.opacity(t.emphasised ? 1 : 0.55), lineWidth: t.emphasised ? 3.5 : 2)
+                if let first = coords.first {
+                    Annotation("", coordinate: first) {
+                        Image(systemName: "house.fill").font(.system(size: 9)).foregroundStyle(.black.opacity(0.8)).padding(4).background(t.color, in: Circle())
+                    }
+                }
+                if let c = t.cursor, c.hasPosition {
+                    Annotation("", coordinate: coord(c)) {
+                        Image(systemName: "location.north.fill").rotationEffect(.degrees(c.yaw ?? 0)).foregroundStyle(.black.opacity(0.85))
+                            .padding(5).background(t.color, in: Circle())
+                            .overlay(Circle().stroke(.white.opacity(t.emphasised ? 0.9 : 0), lineWidth: 1.5))
+                    }
                 }
             }
         }
         .mapStyle(.standard(elevation: .flat, pointsOfInterest: .excludingAll))
         .mapControlVisibility(.hidden)
     }
+
+    func coord(_ f: TelemetryFrame) -> CLLocationCoordinate2D { CLLocationCoordinate2D(latitude: f.latitude!, longitude: f.longitude!) }
+
     func region(_ c: [CLLocationCoordinate2D]) -> MKCoordinateRegion {
+        guard !c.isEmpty else { return MKCoordinateRegion(center: CLLocationCoordinate2D(latitude: 0, longitude: 0), span: MKCoordinateSpan(latitudeDelta: 1, longitudeDelta: 1)) }
         let lats = c.map(\.latitude), lons = c.map(\.longitude)
         let center = CLLocationCoordinate2D(latitude: (lats.min()! + lats.max()!) / 2, longitude: (lons.min()! + lons.max()!) / 2)
-        let span = MKCoordinateSpan(latitudeDelta: max(0.002, (lats.max()! - lats.min()!) * 1.5), longitudeDelta: max(0.002, (lons.max()! - lons.min()!) * 1.5))
+        // Pad generously: live tracks keep growing after the first frame.
+        let span = MKCoordinateSpan(latitudeDelta: max(0.008, (lats.max()! - lats.min()!) * 1.6), longitudeDelta: max(0.008, (lons.max()! - lons.min()!) * 1.6))
         return MKCoordinateRegion(center: center, span: span)
     }
 }

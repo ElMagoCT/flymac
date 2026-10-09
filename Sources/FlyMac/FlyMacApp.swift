@@ -57,44 +57,48 @@ enum Screenshotter {
             let routes: [(AppModel.Route, String)] = [(.devices, "devices"), (.media, "media"), (.library, "library"), (.live, "live"), (.telemetry, "telemetry"), (.doctor, "doctor")]
             for (r, name) in routes {
                 model.selection = r
-                if r == .live { model.live.refreshOptions(settings: model.settings) }
-                if r == .live, let o = model.live.options.first { await model.live.start(o); try? await Task.sleep(nanoseconds: 2_500_000_000) }
-                if r == .telemetry, let m = model.mock { model.telemetry.connect(link: m.makeDUMLLink()); try? await Task.sleep(nanoseconds: 3_000_000_000) }
+                if r == .live {
+                    model.refreshLiveOptions()
+                    await model.live.showAll()
+                    try? await Task.sleep(nanoseconds: 3_000_000_000)
+                }
+                if r == .telemetry {
+                    for d in model.devices where d.origin == .mock && model.canLinkTelemetry(d) { model.connectTelemetry(d) }
+                    model.focusedSessionID = model.devices.first(where: { $0.id != "mock" && $0.origin == .mock })?.id ?? "mock"
+                    try? await Task.sleep(nanoseconds: 6_000_000_000)
+                }
                 if r == .media {
                     try? await Task.sleep(nanoseconds: 2_000_000_000)
                     // Pull everything from the mock over HTTP so the library screenshot has content.
-                    if let d = model.devices.first(where: { $0.origin == .mock }), let src = model.mediaSource(for: d), let m = model.mock {
-                        model.download(m.store.files, from: src)
+                    if let d = model.devices.first(where: { $0.id == "mock" }), let src = model.mediaSource(for: d), let m = model.mock {
+                        model.download(m.store.files, from: src, device: d)
                         for _ in 0..<60 { try? await Task.sleep(nanoseconds: 500_000_000); if !model.downloads.isEmpty, model.downloads.allSatisfy({ if case .done = $0.state { return true }; if case .failed = $0.state { return true }; return false }) { break } }
                         try? await Task.sleep(nanoseconds: 1_000_000_000)
                     }
                 }
                 try? await Task.sleep(nanoseconds: 1_200_000_000)
                 capture(window, to: "\(dir)/\(name).png")
+                if r == .live, ProcessInfo.processInfo.environment["FLYMAC_SCREENSHOT_RECORD"] != nil {
+                    model.live.recordAll(codec: "hevc")
+                    try? await Task.sleep(nanoseconds: 3_000_000_000)
+                    await model.live.stopAllRecordings()
+                    let files = model.live.tiles.map { t in t.lastRecording?.path ?? "MISSING \(t.selected?.title ?? "-") running=\(t.isRunning) err=\(t.error ?? "-")" }
+                    try? files.joined(separator: "\n").write(toFile: "\(dir)/recordings.txt", atomically: true, encoding: .utf8)
+                }
             }
             NSApp.terminate(nil)
         }
     }
     @MainActor static func findModel(_ v: NSView) -> AppModel? { ScreenshotBridge.model }
-    @MainActor static func findMTK(_ v: NSView) -> NSView? {
-        if String(describing: type(of: v)) == "MTKView" { return v }
-        for c in v.subviews { if let m = findMTK(c) { return m } }
-        return nil
-    }
     @MainActor static func capture(_ w: NSWindow, to path: String) {
         guard let v = w.contentView, let rep = v.bitmapImageRepForCachingDisplay(in: v.bounds) else { return }
         v.cacheDisplay(in: v.bounds, to: rep)
-        // CAMetalLayer content is not part of cacheDisplay; paste the latest decoded frame where the MTKView sits.
-        if let mtk = findMTK(v), let cg = ScreenshotBridge.model?.live.renderer?.snapshot(), let ctx = NSGraphicsContext(bitmapImageRep: rep) {
-            NSGraphicsContext.saveGraphicsState(); NSGraphicsContext.current = ctx
-            let r = mtk.convert(mtk.bounds, to: v)
-            let img = NSImage(cgImage: cg, size: NSSize(width: cg.width, height: cg.height))
-            let scale = min(r.width / CGFloat(cg.width), r.height / CGFloat(cg.height))
-            let sz = NSSize(width: CGFloat(cg.width) * scale, height: CGFloat(cg.height) * scale)
-            img.draw(in: NSRect(x: r.midX - sz.width / 2, y: r.midY - sz.height / 2, width: sz.width, height: sz.height))
-            NSGraphicsContext.restoreGraphicsState()
-        }
         if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: URL(fileURLWithPath: path)) }
     }
 }
-enum ScreenshotBridge { @MainActor static var model: AppModel? }
+enum ScreenshotBridge {
+    @MainActor static var model: AppModel?
+    /// Metal layers are invisible to cacheDisplay, so in screenshot mode live
+    /// tiles draw their latest frame as an ordinary image instead.
+    static let stillFrames = ProcessInfo.processInfo.environment["FLYMAC_SCREENSHOT_DIR"] != nil
+}

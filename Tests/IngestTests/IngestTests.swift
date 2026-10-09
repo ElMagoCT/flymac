@@ -81,6 +81,25 @@ private func write(_ dir: URL, _ name: String, _ bytes: Int, seed: UInt8 = 7) ->
         #expect(reopened.groups().contains { $0.items.count == 2 })
     }
 
+    @Test func sameNamesFromTwoDevicesStaySeparate() {
+        // Two pairs of goggles, each with its own DJI_0001.MP4 + .SRT, same day.
+        let a = tempDir(), b = tempDir(), root = tempDir()
+        let day = Date(timeIntervalSince1970: 1_790_000_000)
+        let lib = MediaLibrary(root: root)
+        for (dir, src, seed) in [(a, "Goggles N3 1", UInt8(1)), (b, "Goggles N3 2", UInt8(2))] {
+            let mp4 = write(dir, "DCIM/100MEDIA/DJI_0001.MP4", 4000, seed: seed)
+            let srt = write(dir, "DCIM/100MEDIA/DJI_0001.SRT", 300, seed: seed)
+            for f in [mp4, srt] { guard case .imported = lib.importFile(at: f, sourceID: src, captured: day) else { Issue.record("import failed"); return } }
+        }
+        let groups = lib.groups()
+        #expect(groups.count == 2)
+        #expect(Set(groups.map(\.sourceID)) == ["Goggles N3 1", "Goggles N3 2"])
+        #expect(groups.allSatisfy { $0.items.count == 2 && $0.stem == "DJI_0001" })
+        #expect(Set(groups.map(\.id)).count == 2)
+        // Second device's files were renamed on disk rather than overwriting the first.
+        #expect(lib.items.contains { $0.relativePath.hasSuffix("DJI_0001-1.MP4") })
+    }
+
     @Test func rejectsWrongExpectedHash() {
         let src = tempDir(), root = tempDir()
         let a = write(src, "DJI_0002.MP4", 100)

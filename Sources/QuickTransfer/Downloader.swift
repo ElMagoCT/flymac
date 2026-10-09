@@ -11,6 +11,9 @@ public actor Downloader {
         public let id: String
         public let file: RemoteMediaFile
         public let url: URL
+        /// Which device this came from. Two devices can hold the same path.
+        public let sourceKey: String
+        public let sourceName: String
         public var state: State = .queued
         public var received: Int64 = 0
         public var bytesPerSecond: Double = 0
@@ -40,9 +43,12 @@ public actor Downloader {
     public func unobserve(_ id: UUID) { listeners[id] = nil }
     private func notify() { let j = jobs; for l in listeners.values { l(j) } }
 
-    public func enqueue(_ file: RemoteMediaFile, from url: URL) {
-        guard !jobs.contains(where: { $0.id == file.path }) else { return }
-        jobs.append(Job(id: file.path, file: file, url: url))
+    public static func jobID(sourceKey: String, path: String) -> String { "\(sourceKey)|\(path)" }
+
+    public func enqueue(_ file: RemoteMediaFile, from url: URL, sourceKey: String = "default", sourceName: String = "") {
+        let id = Downloader.jobID(sourceKey: sourceKey, path: file.path)
+        guard !jobs.contains(where: { $0.id == id }) else { return }
+        jobs.append(Job(id: id, file: file, url: url, sourceKey: sourceKey, sourceName: sourceName))
         notify(); pump()
     }
 
@@ -83,9 +89,12 @@ public actor Downloader {
     }
 
     private func run(_ job: Job) async {
-        let partial = staging.appendingPathComponent(job.file.name + ".partial")
-        let final = staging.appendingPathComponent(job.file.name)
+        // One staging folder per source so identical names never collide.
         let fm = FileManager.default
+        let dir = staging.appendingPathComponent(Downloader.safeFolder(job.sourceKey), isDirectory: true)
+        try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
+        let partial = dir.appendingPathComponent(job.file.name + ".partial")
+        let final = dir.appendingPathComponent(job.file.name)
         var offset: Int64 = 0
         if let attrs = try? fm.attributesOfItem(atPath: partial.path) { offset = (attrs[.size] as? NSNumber)?.int64Value ?? 0 }
         if offset >= job.file.size, job.file.size > 0 { offset = 0; try? fm.removeItem(at: partial) }
@@ -146,6 +155,12 @@ public actor Downloader {
         }
         running[job.id] = nil
         pump()
+    }
+
+    static func safeFolder(_ key: String) -> String {
+        let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_."))
+        let s = String(key.unicodeScalars.map { allowed.contains($0) ? Character($0) : "_" })
+        return s.isEmpty ? "default" : String(s.prefix(80))
     }
 
     private nonisolated func fullHash(_ url: URL) throws -> String {

@@ -10,6 +10,10 @@ import Telemetry
 public final class SceneRenderer: @unchecked Sendable {
     public let width: Int, height: Int
     private var pool: CVPixelBufferPool?
+    /// Text shown in the baked-in OSD, e.g. "MOCK" or "MOCK G2".
+    public var label = "MOCK"
+    /// Shifts the sky colour (−0.2…0.2) so several mock feeds look different.
+    public var skyHue: Double = 0
 
     public init(width: Int, height: Int) {
         self.width = width; self.height = height
@@ -44,7 +48,8 @@ public final class SceneRenderer: @unchecked Sendable {
         let big = CGRect(x: -w, y: -h, width: 3 * w, height: 3 * h)
         // Sky
         let sky = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(),
-                             colors: [CGColor(red: 0.05, green: 0.10, blue: 0.22, alpha: 1), CGColor(red: 0.45, green: 0.62, blue: 0.85, alpha: 1)] as CFArray,
+                             colors: [CGColor(red: 0.05 + max(0, skyHue), green: 0.10, blue: 0.22 - max(0, skyHue) / 2, alpha: 1),
+                                      CGColor(red: min(1, 0.45 + skyHue * 2.5), green: min(1, 0.62 + abs(skyHue)), blue: max(0, 0.85 - skyHue * 2), alpha: 1)] as CFArray,
                              locations: [0, 1])!
         ctx.clip(to: CGRect(x: big.minX, y: horizonY, width: big.width, height: big.maxY - horizonY))
         ctx.drawLinearGradient(sky, start: CGPoint(x: 0, y: h), end: CGPoint(x: 0, y: horizonY), options: [.drawsAfterEndLocation, .drawsBeforeStartLocation])
@@ -94,7 +99,7 @@ public final class SceneRenderer: @unchecked Sendable {
         ctx.fillEllipse(in: CGRect(x: w / 2 - 3, y: h / 2 - 3, width: 6, height: 6))
         text(ctx, String(format: "H %.1f m   D %.0f m   %.1f m/s", f.relativeAltitude ?? 0, f.homeDistance ?? 0, f.horizontalSpeed ?? 0), at: CGPoint(x: m + 12, y: h - m - 34), size: h / 36)
         text(ctx, String(format: "%d%%   %d sats   %02d:%02d", f.batteryPercent ?? 0, f.satellites ?? 0, Int(f.time) / 60, Int(f.time) % 60), at: CGPoint(x: m + 12, y: m + 12), size: h / 36)
-        text(ctx, "MOCK  ISO \(f.iso ?? 0)  \(f.shutter ?? "")  f/\(f.fNumber ?? 0)", at: CGPoint(x: w * 0.55, y: m + 12), size: h / 40)
+        text(ctx, "\(label)  ISO \(f.iso ?? 0)  \(f.shutter ?? "")  f/\(f.fNumber ?? 0)", at: CGPoint(x: w * 0.55, y: m + 12), size: h / 40)
     }
 
     func text(_ ctx: CGContext, _ s: String, at p: CGPoint, size: CGFloat) {

@@ -23,19 +23,28 @@ struct DevicesView: View {
 struct DeviceCard: View {
     @EnvironmentObject var model: AppModel
     let device: DiscoveredDevice
-    @State private var showReasons = false
-    @State private var connecting = false
+    @State private var renaming = false
+    @State private var draftName = ""
 
     var profile: DeviceProfile { device.match.profile }
     var selected: Bool { model.selectedDeviceID == device.id }
+    var color: Color { model.color(forID: device.id) }
+    var linked: Bool { model.session(for: device.id) != nil }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .top) {
-                Image(systemName: profile.family.symbol).font(.system(size: 26, weight: .light)).foregroundStyle(Theme.accent).frame(width: 36)
+                Image(systemName: profile.family.symbol).font(.system(size: 26, weight: .light)).foregroundStyle(color).frame(width: 36)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(device.title).font(.title3.weight(.semibold))
-                    Text(device.subtitle).font(.caption).foregroundStyle(Theme.dim).monospaced()
+                    HStack(spacing: 6) {
+                        Text(model.name(for: device)).font(.title3.weight(.semibold))
+                        Button { draftName = model.labels[device.id]?.isNickname == true ? model.name(for: device) : ""; renaming = true } label: {
+                            Image(systemName: "pencil").font(.caption)
+                        }
+                        .buttonStyle(.plain).foregroundStyle(Theme.dim).help("Name this device (remembered by serial)")
+                        .popover(isPresented: $renaming, arrowEdge: .bottom) { renamePopover }
+                    }
+                    Text(subtitle).font(.caption).foregroundStyle(Theme.dim).monospaced()
                 }
                 Spacer()
                 Chip(text: "\(device.match.score)", symbol: profile.isGeneric ? "questionmark" : "checkmark", color: device.match.score >= 80 ? Theme.ok : device.match.score >= 50 ? Theme.warn : Theme.dim)
@@ -68,10 +77,23 @@ struct DeviceCard: View {
                 if model.mediaSource(for: device) != nil {
                     Button { model.selectedDeviceID = device.id; model.selection = .media } label: { Label("Media", systemImage: "photo.on.rectangle.angled") }
                 }
-                if canConnectDUML {
-                    Button { connectDUML() } label: {
-                        if connecting { ProgressView().controlSize(.small) } else { Label("Read-only link", systemImage: "waveform.path.ecg") }
-                    }.disabled(connecting)
+                if let opt = model.liveOption(forDevice: device.id), model.settings.isOn(.liveView) {
+                    Button {
+                        Task { await model.live.show(opt) }
+                        model.selection = .live
+                    } label: { Label(model.live.tile(showing: opt.id) != nil ? "On screen" : "Watch live", systemImage: "play.rectangle") }
+                }
+                if model.canLinkTelemetry(device) {
+                    if linked {
+                        Button { model.focusedSessionID = device.id; model.selection = .telemetry } label: {
+                            HStack(spacing: 5) { Circle().fill(Theme.ok).frame(width: 6, height: 6); Text("Linked") }
+                        }
+                        Button { model.disconnectTelemetry(device.id, reason: "user") } label: { Image(systemName: "xmark.circle") }.help("Close the read-only link")
+                    } else {
+                        Button { model.connectTelemetry(device); if model.session(for: device.id) != nil { model.selection = .telemetry } } label: {
+                            Label("Read-only link", systemImage: "waveform.path.ecg")
+                        }
+                    }
                 }
                 Spacer()
                 Button { model.selection = .doctor } label: { Label("Doctor", systemImage: "stethoscope") }
@@ -80,26 +102,31 @@ struct DeviceCard: View {
         }
         .padding(16)
         .background(Theme.panel, in: RoundedRectangle(cornerRadius: Theme.radius, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous).stroke(selected ? Theme.accent.opacity(0.6) : Theme.line, lineWidth: selected ? 1.5 : 1))
+        .overlay(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous).stroke(selected ? color.opacity(0.6) : Theme.line, lineWidth: selected ? 1.5 : 1))
         .animation(.easeOut(duration: 0.2), value: selected)
     }
 
-    var canConnectDUML: Bool {
-        if device.origin == .mock { return true }
-        guard let u = device.usb else { return false }
-        return u.interfaces.contains { $0.interfaceClass == USBClass.vendorSpecific && $0.endpoints.contains { $0.kind == .bulk } }
+    /// Model name under a nickname, serial tail for telling identical units apart.
+    var subtitle: String {
+        var parts = [device.subtitle]
+        if model.labels[device.id]?.isNickname == true { parts.insert(device.title, at: 0) }
+        if let s = device.usb?.serialNumber, !s.isEmpty, model.labels[device.id]?.ordinal != nil { parts.append("…" + String(s.suffix(4))) }
+        return parts.joined(separator: "  ")
     }
 
-    func connectDUML() {
-        connecting = true
-        defer { connecting = false }
-        if device.origin == .mock, let m = model.mock {
-            model.telemetry.connect(link: m.makeDUMLLink())
-        } else if let u = device.usb {
-            do { model.telemetry.connect(link: try USBBulkLink(device: u)) }
-            catch { model.toast = "\(error)"; model.doctor.note("DUML link failed: \(error)"); return }
-        }
-        model.selection = .telemetry
+    var renamePopover: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Name").font(.headline)
+            TextField(device.title, text: $draftName).textFieldStyle(.roundedBorder).frame(width: 220)
+                .onSubmit { model.setNickname(draftName, for: device); renaming = false }
+            HStack {
+                if model.labels[device.id]?.isNickname == true {
+                    Button("Reset") { model.setNickname("", for: device); renaming = false }
+                }
+                Spacer()
+                Button("Save") { model.setNickname(draftName, for: device); renaming = false }.keyboardShortcut(.defaultAction)
+            }
+        }.padding(14)
     }
 }
 

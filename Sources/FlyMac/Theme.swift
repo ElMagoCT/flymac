@@ -15,6 +15,18 @@ enum Theme {
     static let bad = Color(red: 0.92, green: 0.40, blue: 0.40)
     static let radius: CGFloat = 10
 
+    /// One colour per connected device (roster slot). Muted so four of them on
+    /// screen still read as one system; slot 0 is the app accent.
+    static let devicePalette: [Color] = [
+        accent,
+        Color(red: 0.95, green: 0.70, blue: 0.36),   // amber
+        Color(red: 0.56, green: 0.84, blue: 0.52),   // green
+        Color(red: 0.86, green: 0.55, blue: 0.80),   // orchid
+        Color(red: 0.62, green: 0.66, blue: 0.98),   // periwinkle
+        Color(red: 0.94, green: 0.52, blue: 0.48),   // coral
+    ]
+    static func deviceColor(_ slot: Int) -> Color { devicePalette[((slot % devicePalette.count) + devicePalette.count) % devicePalette.count] }
+
     static func color(for e: Evidence) -> Color {
         switch e { case .confirmed: return ok; case .likely: return accent; case .unverified: return dim; case .blocked: return bad }
     }

@@ -18,7 +18,7 @@ private struct DoctorBody: View {
                 Spacer()
                 Toggle("Scan hotspot ports", isOn: $scan).toggleStyle(.checkbox).font(.caption)
                 Button {
-                    Task { await d.run(devices: model.devices, registry: model.registry, handshake: model.telemetry.handshake, scanGateway: scan) }
+                    Task { await d.run(devices: model.devices, registry: model.registry, handshake: model.allHandshakes, scanGateway: scan) }
                 } label: {
                     if d.running { HStack(spacing: 6) { ProgressView().controlSize(.small); Text(d.progress) } } else { Label("Run", systemImage: "stethoscope") }
                 }.buttonStyle(.borderedProminent).tint(Theme.accent).controlSize(.small).disabled(d.running)

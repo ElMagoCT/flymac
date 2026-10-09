@@ -7,17 +7,19 @@ import Telemetry
 /// synthetic flight. Also pushes an RC "channels" frame at 20 Hz whose word 0-3
 /// wobble so the stick-diff view has something to show.
 public final class MockDUMLLink: DUMLLink, @unchecked Sendable {
-    public let name = "Mock DUML"
+    public let name: String
     public let incoming: AsyncStream<DUMLPacket>
     private var continuation: AsyncStream<DUMLPacket>.Continuation?
     private var pushTask: Task<Void, Never>?
-    public let flight = SyntheticFlight()
+    public let flight: SyntheticFlight
     private let started = Date()
     private var seq: UInt16 = 0
     public var speed: Double = 1.0
     private let lock = NSLock()
 
-    public init() {
+    public init(flight: SyntheticFlight = SyntheticFlight(), name: String = "Mock DUML") {
+        self.flight = flight
+        self.name = name
         var c: AsyncStream<DUMLPacket>.Continuation!
         incoming = AsyncStream(bufferingPolicy: .bufferingNewest(64)) { c = $0 }
         continuation = c

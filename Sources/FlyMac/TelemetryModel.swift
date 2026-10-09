@@ -10,6 +10,8 @@ import MockDevice
 /// RC channel diff. Everything sent is whitelisted and logged by DUMLSession.
 @MainActor
 final class TelemetryModel: ObservableObject {
+    let deviceID: String
+    init(deviceID: String) { self.deviceID = deviceID }
     @Published var linkName: String?
     @Published var status: String = "Not connected"
     @Published var latest: TelemetryFrame?
