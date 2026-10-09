@@ -24,7 +24,21 @@ _pending_
 
 ## 3. Goggles N3 over USB-C (powered off, then on)
 
-_pending_
+### 3a. 2026-10-08 — goggles on, linked to the Avata 2, Mac-to-goggles USB-C cable
+
+Context: the same cable and goggles give live view in DJI Fly on Micah's iPad.
+
+Observed on the Mac (`captures/02-goggles-n3-watch.log`, `ioreg -p IOAccessory`, `system_profiler SPPowerDataType`):
+
+- **No USB device enumerated.** `IOUSBHostDevice` count 0; `ioreg -p IOUSB` shows only the two root controllers.
+- The port is live: `ConnectionActive = Yes`, `TransportsActive = ("CC","USB3","USB2")`.
+- The Mac reports **external power from that port: 5000 mV, 500 mA, 3 W, "not charging"** (`AdapterDetails` Watts=3, Current=500, AdapterID 12). Default USB power is what a host/source supplies, so the **goggles took the source/host (DFP) role and the Mac became the sink/device (UFP)**.
+- Nothing appears on the Mac's side because macOS has no user-space way to act as a USB device.
+
+Interpretation (likely, not yet proven): toward a phone or tablet the goggles behave like DJI's remote controllers, acting as the **USB host** and treating the phone as the device, the way Android Open Accessory and Apple's iAP2-over-USB accessories work. That is why the iPad works and the Mac does not. Emulating the iPad's side would need the Mac to be a USB device, which a stock Mac cannot do.
+Sources: Android Open Accessory protocol (source.android.com, "accessory acts as the USB host"); USB Type-C spec roles (DFP/UFP, Try.SRC).
+
+Next: force the goggles into the *device* role by putting a hub (or USB-A host port) between them and the Mac. Hubs' downstream ports are always hosts, and that is how DJI Assistant 2 normally reaches DJI hardware from a computer.
 
 ## 4. Avata 2 over USB-C
 
