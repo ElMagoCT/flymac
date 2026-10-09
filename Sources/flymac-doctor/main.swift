@@ -7,6 +7,7 @@ import QuickTransfer
 //   flymac-doctor            USB + network + profiles
 //   flymac-doctor --scan     also port-scan the current gateway and sweep HTTP
 //   flymac-doctor --watch    print USB attach/detach events until Ctrl-C
+setvbuf(stdout, nil, _IOLBF, 0)   // line-buffered so --watch logs stream to a file
 let args = CommandLine.arguments.dropFirst()
 let registry = ProfileRegistry.shared
 
