@@ -38,6 +38,19 @@ Observed on the Mac (`captures/02-goggles-n3-watch.log`, `ioreg -p IOAccessory`,
 Interpretation (likely, not yet proven): toward a phone or tablet the goggles behave like DJI's remote controllers, acting as the **USB host** and treating the phone as the device, the way Android Open Accessory and Apple's iAP2-over-USB accessories work. That is why the iPad works and the Mac does not. Emulating the iPad's side would need the Mac to be a USB device, which a stock Mac cannot do.
 Sources: Android Open Accessory protocol (source.android.com, "accessory acts as the USB host"); USB Type-C spec roles (DFP/UFP, Try.SRC).
 
+### 3b. 2026-10-08 — the goggles enumerate the Mac (Mac in USB device mode)
+
+Goggles only, no charger. Read from the IORegistry (`ioreg -l`), no writes.
+
+- Port-USB-C@1 data status register `f1 00 00 80 00`: data connection, USB 2 + USB 3 lines up, Mac data role = **UFP (device)**. The port notes the far end as `IOAccessoryUSBConnectString = "Host"`.
+- The Mac's USB *device* controller (`AppleT8103USBXDCI`) reports **`DeviceState = "Configured"`, `OnBus = Yes`, `DeviceAddress = 1`, `SelectedConfiguration = 1`, High Speed (480 Mb/s)**. So the goggles ran a full USB enumeration of the Mac as a host would.
+- What the Mac presented: Apple `05ac:1903` "MacBook Air", one configuration with only CDC-NCM network functions (`ConfigurationType = ncmAuxBringup`; interfaces AppleUSBNCMControl/Data and Aux). Those surface on the Mac as `en3` and `anpi0`.
+- The goggles never brought the network up: `en3` status inactive, 0 packets each way.
+
+Reading: the goggles are a USB host that expects a phone/tablet behind the cable. An iPad presents an accessory interface (Apple's iAP2-over-USB "host mode"); an Android phone gets switched into Android Open Accessory mode. A Mac presents neither, so the goggles configure it and then stop. In both of those protocols the *goggles* are the side that proves itself (MFi chip / accessory strings); the phone side holds no secret. The blocker is that macOS gives apps no way to add USB device functions, so the Mac cannot offer that interface.
+
+Tools: `tools/usbc-role-monitor.sh` logs port power, data role and the Mac's device state every second (read-only). Snapshot in `captures/04-goggles-role-snapshot.txt`.
+
 Next: force the goggles into the *device* role by putting a hub (or USB-A host port) between them and the Mac. Hubs' downstream ports are always hosts, and that is how DJI Assistant 2 normally reaches DJI hardware from a computer.
 
 ## 4. Avata 2 over USB-C
@@ -56,7 +69,7 @@ _pending_
 
 | Feature | Avata 2 | Goggles N3 | RC-N2 | Evidence |
 |---|---|---|---|---|
-| USB enumeration | | | | |
+| USB enumeration | | goggles enumerate the *Mac* (goggles = host) | | 3a/3b |
 | Card as mass storage | | n/a? | n/a | |
 | DUML handshake (ping/version) | | | | |
 | Stick/button read | n/a | n/a | | |
